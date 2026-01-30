@@ -51,31 +51,7 @@ def ensure_layout(project_dir: Path) -> dict:
     (project_dir / "output" / "test_cases").mkdir(parents=True, exist_ok=True)
     (project_dir / "output" / "xmind").mkdir(parents=True, exist_ok=True)
 
-    # config（保留 .testgen 目录名，避免影响现有 MCP/流程）
-    cfg_dir = (project_dir.parent / ".testgen").resolve()
-    cfg_dir.mkdir(parents=True, exist_ok=True)
-    cfg_path = cfg_dir / "config.json"
-    cfg = {
-        "base_dir": str(project_dir.resolve().relative_to(project_dir.parent.resolve())),
-        "input": {
-            "prd_docx_dir": str((project_dir / "input" / "prdword").relative_to(project_dir.parent)),
-            "knowledge_dir": str((project_dir / "input" / "knowledge").relative_to(project_dir.parent)),
-            "design_docx_dir": str((project_dir / "input" / "codedesignword").relative_to(project_dir.parent)),
-            "baseline_cases_dir": str((project_dir / "input" / "baseline_cases").relative_to(project_dir.parent)),
-        },
-        "output": {
-            "prd_md_dir": str((project_dir / "output" / "prdmd").relative_to(project_dir.parent)),
-            "design_md_dir": str((project_dir / "output" / "codedesignmd").relative_to(project_dir.parent)),
-            "requirement_analysis_dir": str((project_dir / "output" / "requirement_analysis").relative_to(project_dir.parent)),
-            "test_outline_dir": str((project_dir / "output" / "test_outline").relative_to(project_dir.parent)),
-            "test_cases_dir": str((project_dir / "output" / "test_cases").relative_to(project_dir.parent)),
-            "xmind_dir": str((project_dir / "output" / "xmind").relative_to(project_dir.parent)),
-        },
-    }
-    cfg_path.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-
     return {
-        "config": str(cfg_path),
         "base": str(project_dir),
     }
 
@@ -94,7 +70,6 @@ def main() -> int:
     print("初始化完成：")
     print(f"- workspace_root: {ws}")
     print(f"- base: {res['base']}")
-    print(f"- config: {res['config']}")
     return 0
 
 

@@ -9,12 +9,24 @@ disable-model-invocation: true
 
 `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx <path> --doc-type prd|design`
 
+如果文件名包含中文导致命令行编码异常，可改用目录方式：
+
+- 列出匹配列表：
+  `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx-dir <dir> --pattern "*.docx" --list`
+- 选择第 N 个：
+  `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx-dir <dir> --pattern "*.docx" --docx-index 2 --doc-type prd|design`
+
 示例：
 
 - 需求：
   `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx input/prdword/需求.docx --doc-type prd`
 - 设计：
   `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx input/codedesignword/设计.docx --doc-type design`
+
+- 中文路径兜底（目录方式）：
+  `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx-dir input/prdword --pattern "*.docx" --list`
+  `python .cursor/skills/testcasegen-docx2md/scripts/docx2md.py --docx-dir input/prdword --pattern "*.docx" --docx-index 1 --doc-type prd`
+
 
 输出默认落到：
 - `output/prdmd/<docx名>.md`
