@@ -53,10 +53,31 @@ def rgb_to_hex(rgb):
         return None
 
 
+def is_dark_color(color_hex):
+    """判断是否是深色/接近黑色的颜色，这些颜色不需要标签（默认颜色）"""
+    if not color_hex:
+        return True
+    hex_color = color_hex.lstrip("#").lower()
+    try:
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        # RGB 都小于等于 80 视为深色，过滤 #000000、#333333、#262626 等
+        if r <= 80 and g <= 80 and b <= 80:
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def get_text_color(run):
     try:
         if run.font.color and run.font.color.rgb:
-            return rgb_to_hex(run.font.color.rgb)
+            color_hex = rgb_to_hex(run.font.color.rgb)
+            # 过滤掉深色/接近黑色的颜色（默认颜色不需要标签）
+            if is_dark_color(color_hex):
+                return None
+            return color_hex
     except Exception:
         pass
     return None
@@ -288,6 +309,7 @@ def main() -> int:
     ap.add_argument("--docx-name-file", default="", help="包含 DOCX 文件名的文本文件（UTF-8，配合 --docx-dir）")
     ap.add_argument("--doc-type", choices=["prd", "design"], default="prd", help="文档类型（影响默认输出目录）")
     ap.add_argument("--out", default="", help="输出 md 路径（可选）")
+    ap.add_argument("--out-path-file", default="", help="包含输出 md 路径的文本文件（UTF-8，避免中文路径编码问题）")
     ap.add_argument("--images", default="", help="图片目录（可选）")
     args = ap.parse_args()
 
@@ -360,7 +382,17 @@ def main() -> int:
     if project_root is None:
         project_root = Path.cwd()
 
-    if args.out:
+    if args.out_path_file:
+        out_path_file = Path(args.out_path_file).expanduser()
+        if not out_path_file.exists():
+            raise FileNotFoundError(f"输出路径文件不存在: {out_path_file}")
+        raw_out = out_path_file.read_text(encoding="utf-8").strip()
+        if not raw_out:
+            raise ValueError("输出路径文件为空")
+        out_md = Path(raw_out).expanduser()
+        if not out_md.is_absolute():
+            out_md = (Path.cwd() / out_md).resolve()
+    elif args.out:
         out_md = Path(args.out).expanduser().resolve()
     else:
         out_dir = project_root / "output" / ("prdmd" if args.doc_type == "prd" else "codedesignmd")
