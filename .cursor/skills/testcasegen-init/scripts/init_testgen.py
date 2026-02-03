@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
 
 
@@ -67,9 +68,16 @@ def main() -> int:
     project_dir = (ws / name).resolve()
 
     res = ensure_layout(project_dir)
-    print("初始化完成：")
-    print(f"- workspace_root: {ws}")
-    print(f"- base: {res['base']}")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+    log_path = project_dir / "init_testgen.log"
+    with log_path.open("w", encoding="utf-8") as f:
+        f.write("初始化完成：\n")
+        f.write(f"- workspace_root: {ws}\n")
+        f.write(f"- base: {res['base']}\n")
+    print("初始化完成：详情已写入 init_testgen.log")
     return 0
 
 
