@@ -55,24 +55,6 @@ python -X utf8 "<脚本路径>" --config C:\Users\<用户名>\testcasegen_config
 - `C:\Users\<用户名>\testcasegen_config.json`
 - `C:\Users\<用户名>\init_testgen.py`（仅当步骤 3 选择了方式 B 时）
 
-### 步骤 5：验证结果
-
-使用 **Write 工具** 创建验证脚本 `C:\Users\<用户名>\check_dir.py`：
-
-```python
-# -*- coding: utf-8 -*-
-from pathlib import Path
-p = Path(r"<workspace_root>/<project_name>")
-if p.exists():
-    print(f"创建成功: {p}")
-    for d in sorted(p.iterdir()):
-        print(f"  - {d.name}")
-else:
-    print(f"创建失败: {p}")
-```
-
-执行验证脚本，然后删除它。
-
 ## 示例
 
 用户输入：`/testcasegen-init 我的测试项目`

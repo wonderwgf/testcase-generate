@@ -93,15 +93,8 @@ def main() -> int:
     name = sanitize_dir_name(project_name) or "testcasegen"
     project_dir = (ws / name).resolve()
 
-    res = ensure_layout(project_dir)
-    
-    log_path = project_dir / "init_testgen.log"
-    with log_path.open("w", encoding="utf-8") as f:
-        f.write("初始化完成：\n")
-        f.write(f"- workspace_root: {ws}\n")
-        f.write(f"- base: {res['base']}\n")
+    ensure_layout(project_dir)
     print(f"初始化完成：{project_dir}")
-    print("详情已写入 init_testgen.log")
     return 0
 
 
