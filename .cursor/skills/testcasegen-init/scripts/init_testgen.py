@@ -5,6 +5,7 @@
 
 - 默认以 workspace root 为基准创建目录
 - 创建 input/output 目录结构
+- 支持通过配置文件传递参数（推荐，避免中文路径编码问题）
 """
 
 from __future__ import annotations
@@ -37,6 +38,15 @@ def resolve_workspace_root(workspace_root: str | None) -> Path:
     return Path.cwd().resolve()
 
 
+def load_config(config_path: str) -> dict:
+    """从配置文件加载参数（UTF-8 编码）"""
+    p = Path(config_path)
+    if not p.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    with p.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def ensure_layout(project_dir: Path) -> dict:
     # input
     (project_dir / "input" / "prdword").mkdir(parents=True, exist_ok=True)
@@ -58,26 +68,40 @@ def ensure_layout(project_dir: Path) -> dict:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--workspace-root", default="", help="工作区根目录（可选；默认使用当前目录）")
-    ap.add_argument("--project-name", default="testcasegen", help="项目目录名（默认 testcasegen）")
-    args = ap.parse_args()
-
-    ws = resolve_workspace_root(args.workspace_root or None)
-    name = sanitize_dir_name(args.project_name) or "testcasegen"
-    project_dir = (ws / name).resolve()
-
-    res = ensure_layout(project_dir)
+    # 配置 stdout/stderr 编码
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="", help="配置文件路径（JSON格式，推荐用于中文路径）")
+    ap.add_argument("--workspace-root", default="", help="工作区根目录（可选；默认使用当前目录）")
+    ap.add_argument("--project-name", default="testcasegen", help="项目目录名（默认 testcasegen）")
+    args = ap.parse_args()
+
+    # 优先从配置文件读取参数
+    if args.config:
+        config = load_config(args.config)
+        workspace_root = config.get("workspace_root", "")
+        project_name = config.get("project_name", "testcasegen")
+    else:
+        workspace_root = args.workspace_root
+        project_name = args.project_name
+
+    ws = resolve_workspace_root(workspace_root or None)
+    name = sanitize_dir_name(project_name) or "testcasegen"
+    project_dir = (ws / name).resolve()
+
+    res = ensure_layout(project_dir)
+    
     log_path = project_dir / "init_testgen.log"
     with log_path.open("w", encoding="utf-8") as f:
         f.write("初始化完成：\n")
         f.write(f"- workspace_root: {ws}\n")
         f.write(f"- base: {res['base']}\n")
-    print("初始化完成：详情已写入 init_testgen.log")
+    print(f"初始化完成：{project_dir}")
+    print("详情已写入 init_testgen.log")
     return 0
 
 

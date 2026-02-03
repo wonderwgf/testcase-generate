@@ -1,7 +1,6 @@
 ---
 name: testcasegen-init
 description: 初始化测试用例生成目录结构（input/output）。适合新工程开始做测试用例生成时使用。
-disable-model-invocation: true
 ---
 # testcasegen-init
 
@@ -12,39 +11,84 @@ disable-model-invocation: true
 - `input/`：`prdword/`、`knowledge/`、`codedesignword/`、`baseline_cases/`
 - `output/`：`prdmd/`、`codedesignmd/`、`requirement_analysis/`、`test_outline/`、`test_cases/`、`xmind/`
 
-说明：规则与转换脚本已经以 Skills 形式提供（`.cursor/skills/`），不再需要落到项目目录。
+## Agent 执行流程（必须严格按照此流程执行）
 
-## 使用方式
+当用户调用 `/testcasegen-init <项目名>` 时，Agent 必须按以下步骤操作：
 
-在 Agent 聊天里运行：
+### 步骤 1：生成临时配置文件
 
-`python .cursor/skills/testcasegen-init/scripts/init_testgen.py --project-name <name>`
+使用 **Write 工具** 在用户目录创建临时配置文件 `C:\Users\<用户名>\testcasegen_config.json`：
 
-示例：
+```json
+{
+  "workspace_root": "<当前工作区路径>",
+  "project_name": "<用户指定的项目名>"
+}
+```
 
-`python .cursor/skills/testcasegen-init/scripts/init_testgen.py --project-name testmyproject`
+- `workspace_root`：从 user_info 的 `Workspace Path` 获取
+- `project_name`：从用户输入获取，默认为 `testcasegen`
 
-如需显式指定工作区根目录（当 Cursor 把 cwd 设置到用户目录时很有用）：
+### 步骤 2：查找脚本路径
 
-`python .cursor/skills/testcasegen-init/scripts/init_testgen.py --workspace-root D:\\code\\testgenmcp --project-name testmyproject`
+使用 **Glob 工具** 查找脚本：
+- 搜索模式：`**/testcasegen-init/scripts/init_testgen.py`
+- 搜索目录：当前工作区 或 `C:\Users\<用户名>\.cursor\projects`
 
-## 常见问题：找不到脚本
+### 步骤 3：执行脚本（根据路径是否含中文选择方式）
 
-如果是通过 **add from gitUrl** 加载 skill，脚本会落在用户目录下的 `.cursor\\projects\\<项目路径(用-连接)>\\skills\\...`。
-例如你的项目路径是 `d:\\code\\testtesttest`，对应目录一般是：
-`%USERPROFILE%\\.cursor\\projects\\d-code-testtesttest\\skills\\testcase-generate`
+**判断脚本路径是否包含中文字符：**
 
-可以用“搜索变量版”（更直观，不用手改 `d-code-xxx`）：
+**A. 脚本路径是纯英文** → 直接执行，无需复制：
+```
+python -X utf8 "<脚本路径>" --config C:\Users\<用户名>\testcasegen_config.json
+```
 
-PowerShell：
+**B. 脚本路径包含中文** → 需要复制到用户目录再执行：
+1. 使用 **Read 工具** 读取脚本内容
+2. 使用 **Write 工具** 写入 `C:\Users\<用户名>\init_testgen.py`
+3. 执行：`python -X utf8 C:\Users\<用户名>\init_testgen.py --config C:\Users\<用户名>\testcasegen_config.json`
 
-`$ws='D:\code\testgenmcp'; $slug=($ws -replace ':','' -replace '\\','-'); $p=Join-Path $env:USERPROFILE ".cursor\projects\$slug\skills\testcase-generate\.cursor\skills\testcasegen-init\scripts\init_testgen.py"; python "$p" --workspace-root $ws --project-name testmyproject`
+### 步骤 4：清理临时文件
 
-也可直接用下面的“一键启动”命令自动定位脚本路径并执行：
+使用 **Delete 工具** 删除：
+- `C:\Users\<用户名>\testcasegen_config.json`
+- `C:\Users\<用户名>\init_testgen.py`（仅当步骤 3 选择了方式 B 时）
 
-`python -X utf8 -c "from pathlib import Path; import os, runpy, sys; root = Path(os.environ.get('USERPROFILE',''))/'.cursor'/'projects'; matches = sorted(root.rglob('testcasegen-init/scripts/init_testgen.py')); assert matches, '找不到 init_testgen.py'; script = matches[0]; sys.argv = ['init_testgen.py','--workspace-root', r'D:\\code\\testgenmcp','--project-name','testmyproject']; runpy.run_path(str(script), run_name='__main__')"`
+### 步骤 5：验证结果
 
-说明：
-- 把 `D:\\code\\testgenmcp` 改成你自己的工作区路径
-- 把 `testmyproject` 改成你的项目目录名
+使用 **Write 工具** 创建验证脚本 `C:\Users\<用户名>\check_dir.py`：
 
+```python
+# -*- coding: utf-8 -*-
+from pathlib import Path
+p = Path(r"<workspace_root>/<project_name>")
+if p.exists():
+    print(f"创建成功: {p}")
+    for d in sorted(p.iterdir()):
+        print(f"  - {d.name}")
+else:
+    print(f"创建失败: {p}")
+```
+
+执行验证脚本，然后删除它。
+
+## 示例
+
+用户输入：`/testcasegen-init 我的测试项目`
+
+Agent 执行：
+1. 写入配置文件 `{"workspace_root": "d:\\代码\\项目", "project_name": "我的测试项目"}`
+2. 复制 `init_testgen.py` 到用户目录
+3. 执行 `python -X utf8 C:\Users\xxx\init_testgen.py --config C:\Users\xxx\testcasegen_config.json`
+4. 删除临时的配置文件和脚本
+5. 验证并报告结果
+
+## 为什么使用配置文件 + 复制脚本
+
+Windows 命令行（PowerShell/cmd）在传递中文参数和中文路径时存在编码问题，会导致路径乱码。解决方案：
+
+1. **配置文件**：将中文路径/项目名写入 UTF-8 编码的 JSON 文件
+2. **复制脚本**：将脚本复制到纯英文路径（用户目录）下执行
+
+这样可以完美支持中文路径和项目名，避免任何编码问题。
