@@ -905,6 +905,9 @@ def main():
             if not md_file:
                 print("错误: 配置文件中缺少 md_file 字段")
                 return
+            # 确保 md_file 是绝对路径
+            if not os.path.isabs(md_file):
+                md_file = os.path.abspath(md_file)
             if not os.path.exists(md_file):
                 print("错误: 文件不存在: {}".format(md_file))
                 return
@@ -924,9 +927,15 @@ def main():
             return
         with open(path_file, "r", encoding="utf-8") as f:
             md_file = f.readline().strip()
+        # 确保 md_file 是绝对路径
+        if not os.path.isabs(md_file):
+            md_file = os.path.abspath(md_file)
         output_dir = sys.argv[3] if len(sys.argv) > 3 else None
     else:
         md_file = sys.argv[1]
+        # 确保 md_file 是绝对路径
+        if not os.path.isabs(md_file):
+            md_file = os.path.abspath(md_file)
         output_dir = sys.argv[2] if len(sys.argv) > 2 else None
     
     if not os.path.exists(md_file):
@@ -950,12 +959,18 @@ if __name__ == "__main__":
     if os.path.exists(default_path_file):
         with open(default_path_file, "r", encoding="utf-8") as f:
             md_file = f.readline().strip()
+        # 确保 md_file 是绝对路径
+        if not os.path.isabs(md_file):
+            md_file = os.path.abspath(md_file)
         output_dir = None
         create_xmind_from_md(md_file, output_dir)
         sys.exit(0)
 
     # Markdown 测试用例文件路径（必填）
     md_file = r"output\test_cases\示例_测试用例.md"
+    # 确保 md_file 是绝对路径
+    if not os.path.isabs(md_file):
+        md_file = os.path.abspath(md_file)
 
     # 输出目录（可选，留空则输出到 md_file 同级目录）
     output_dir = None

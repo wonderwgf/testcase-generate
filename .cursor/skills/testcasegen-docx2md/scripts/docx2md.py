@@ -411,6 +411,8 @@ def main() -> int:
         try:
             if args.docx:
                 docx_path = Path(args.docx).expanduser()
+                if not docx_path.is_absolute():
+                    docx_path = (Path.cwd() / docx_path).resolve()
             elif args.docx_dir:
                 docx_dir = Path(args.docx_dir).expanduser()
                 if docx_dir.exists():
@@ -465,6 +467,8 @@ def main() -> int:
             docx_path = (Path.cwd() / docx_path).resolve()
     elif args.docx:
         docx_path = Path(args.docx).expanduser()
+        if not docx_path.is_absolute():
+            docx_path = (Path.cwd() / docx_path).resolve()
     elif args.docx_dir:
         docx_dir = Path(args.docx_dir).expanduser()
         if not docx_dir.exists():
