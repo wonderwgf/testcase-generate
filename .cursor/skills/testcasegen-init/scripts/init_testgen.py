@@ -3,9 +3,19 @@
 """
 初始化测试用例生成目录（用于 Cursor Skills）。
 
-- 默认以 workspace root 为基准创建目录
-- 创建 input/output 目录结构
-- 支持通过配置文件传递参数（推荐，避免中文路径编码问题）
+功能：
+- 在指定工作区下创建项目目录及 input/output 子目录结构
+- 创建 input/：prdword、knowledge、codedesignword、baseline_cases
+- 创建 output/：prdmd、codedesignmd、requirement_analysis、test_outline、test_cases、xmind
+
+用法：
+  方案 A（路径全英文，推荐）：
+    python init_testgen.py <workspace_root> <project_name>
+    python init_testgen.py "D:\\code\\project" "mytest"
+
+  方案 B（路径含中文，使用配置文件）：
+    python init_testgen.py --config <config.json>
+    配置文件格式：{"workspace_root": "...", "project_name": "..."}
 """
 
 from __future__ import annotations
@@ -74,18 +84,25 @@ def main() -> int:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
 
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="", help="配置文件路径（JSON格式，推荐用于中文路径）")
-    ap.add_argument("--workspace-root", default="", help="工作区根目录（可选；默认使用当前目录）")
-    ap.add_argument("--project-name", default="testcasegen", help="项目目录名（默认 testcasegen）")
+    ap = argparse.ArgumentParser(
+        description="初始化测试用例生成目录结构",
+        usage="%(prog)s [workspace_root] [project_name] | --config <config.json>"
+    )
+    # 位置参数（可选）- 方案 A：直接传参
+    ap.add_argument("workspace_root", nargs="?", default="", help="工作区根目录（可选；默认使用当前目录）")
+    ap.add_argument("project_name", nargs="?", default="testcasegen", help="项目目录名（默认 testcasegen）")
+    # 命名参数 - 方案 B：配置文件
+    ap.add_argument("--config", default="", help="配置文件路径（JSON格式，用于中文路径）")
     args = ap.parse_args()
 
-    # 优先从配置文件读取参数
+    # 优先级：配置文件 > 位置参数 > 默认值
     if args.config:
+        # 方案 B：从配置文件读取参数
         config = load_config(args.config)
         workspace_root = config.get("workspace_root", "")
         project_name = config.get("project_name", "testcasegen")
     else:
+        # 方案 A：从位置参数读取
         workspace_root = args.workspace_root
         project_name = args.project_name
 
@@ -93,15 +110,9 @@ def main() -> int:
     name = sanitize_dir_name(project_name) or "testcasegen"
     project_dir = (ws / name).resolve()
 
-    res = ensure_layout(project_dir)
+    ensure_layout(project_dir)
     
-    log_path = project_dir / "init_testgen.log"
-    with log_path.open("w", encoding="utf-8") as f:
-        f.write("初始化完成：\n")
-        f.write(f"- workspace_root: {ws}\n")
-        f.write(f"- base: {res['base']}\n")
     print(f"初始化完成：{project_dir}")
-    print("详情已写入 init_testgen.log")
     return 0
 
 
