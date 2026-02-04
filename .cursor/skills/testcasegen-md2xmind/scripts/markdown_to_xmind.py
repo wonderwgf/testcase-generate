@@ -853,6 +853,21 @@ def _add_step_and_expected(parent, step_data):
 
 
 # ============================================================
+# 配置文件支持（处理中文路径）
+# ============================================================
+
+def load_config(config_path: str) -> dict:
+    """从配置文件加载参数（UTF-8 编码）"""
+    import json
+    from pathlib import Path
+    p = Path(config_path)
+    if not p.exists():
+        raise FileNotFoundError("配置文件不存在: {}".format(config_path))
+    with p.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ============================================================
 # 命令行入口
 # ============================================================
 
@@ -864,14 +879,40 @@ def main():
         print("\n用法:")
         print("  python markdown_to_xmind.py <md文件路径> [输出目录]")
         print("  python markdown_to_xmind.py --path-file <路径文件> [输出目录]")
+        print("  python markdown_to_xmind.py --config <配置文件.json>")
         print("\n示例:")
         print("  python markdown_to_xmind.py 详细测试用例.md")
         print("  python markdown_to_xmind.py 额度服务V1.3.0版本_详细测试用例.md output/xmind")
         print("  python markdown_to_xmind.py --path-file tmp_path.txt output/xmind")
+        print("  python markdown_to_xmind.py --config md2xmind_config.json")
+        print("\n配置文件格式（JSON，用于中文路径）:")
+        print('  {"md_file": "D:\\\\路径\\\\测试用例.md", "output_dir": "D:\\\\路径\\\\output\\\\xmind"}')
         print("\n格式说明：")
         print("  - 目录层级：## 模块 > ### 功能 > #### 场景 > ##### 用例")
         print("  - 用例字段：- 前置 / - 操作 / - 预期 / - 优先级")
         return
+
+    # 配置文件方式（推荐用于中文路径）
+    if sys.argv[1] == "--config":
+        if len(sys.argv) < 3:
+            print("错误: 缺少配置文件路径")
+            return
+        config_path = sys.argv[2]
+        try:
+            config = load_config(config_path)
+            md_file = config.get("md_file", "")
+            output_dir = config.get("output_dir", None)
+            if not md_file:
+                print("错误: 配置文件中缺少 md_file 字段")
+                return
+            if not os.path.exists(md_file):
+                print("错误: 文件不存在: {}".format(md_file))
+                return
+            create_xmind_from_md(md_file, output_dir)
+            return
+        except Exception as e:
+            print("错误: 加载配置文件失败: {}".format(e))
+            return
 
     if sys.argv[1] == "--path-file":
         if len(sys.argv) < 3:

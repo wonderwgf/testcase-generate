@@ -2,13 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 DOCX -> Markdown（用于 Cursor Skills）。
+支持自动检测中文路径并使用配置文件方案。
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from docx import Document
@@ -23,6 +26,78 @@ def _stdout_utf8():
 
 
 _stdout_utf8()
+
+
+def has_non_ascii(path_str: str) -> bool:
+    """检测路径是否包含非 ASCII 字符（如中文）"""
+    try:
+        path_str.encode('ascii')
+        return False
+    except UnicodeEncodeError:
+        return True
+
+
+def get_config_file_path() -> Path:
+    """获取配置文件的保存路径（用户目录下）"""
+    # 优先使用用户目录下的固定位置，避免中文路径
+    home = Path.home()
+    config_dir = home / ".cursor" / "temp"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir / "docx2md_auto_config.json"
+
+
+def create_auto_config(docx_path: Path, doc_type: str, out_path: Path = None, images_path: Path = None) -> Path:
+    """
+    自动创建配置文件以处理中文路径问题。
+    返回配置文件路径。
+    """
+    config = {
+        "docx": str(docx_path.resolve()),
+        "doc_type": doc_type,
+    }
+    if out_path:
+        config["out"] = str(out_path.resolve())
+    if images_path:
+        config["images"] = str(images_path.resolve())
+    
+    config_path = get_config_file_path()
+    with open(config_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+    
+    print(f"[自动配置] 检测到中文路径，已创建配置文件: {config_path}")
+    return config_path
+
+
+def check_and_handle_chinese_path(args) -> bool:
+    """
+    检查参数中是否包含中文路径，如果有则自动创建配置文件。
+    返回 True 表示已处理（需要从配置文件加载），False 表示无需处理。
+    """
+    paths_to_check = [
+        args.docx,
+        args.docx_path_file,
+        args.docx_dir,
+        args.out,
+        args.out_path_file,
+        args.images,
+    ]
+    
+    has_chinese = any(has_non_ascii(p) for p in paths_to_check if p)
+    
+    if not has_chinese:
+        return False
+    
+    print("[自动配置] 检测到参数中包含中文路径，将自动使用配置文件方案...")
+    return True
+
+
+def load_config(config_path: str) -> dict:
+    """从配置文件加载参数（UTF-8 编码）"""
+    p = Path(config_path)
+    if not p.exists():
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    with p.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def get_paragraph_style_level(paragraph):
@@ -300,6 +375,7 @@ def convert_docx_to_markdown(docx_path, output_path, image_dir):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--config", default="", help="配置文件路径（JSON格式，推荐用于中文路径）")
     ap.add_argument("--docx", default="", help="DOCX 路径（包含中文时可改用 --docx-path-file 或 --docx-dir）")
     ap.add_argument("--docx-path-file", default="", help="包含 DOCX 路径的文本文件（UTF-8）")
     ap.add_argument("--docx-dir", default="", help="DOCX 所在目录（避免中文路径编码问题）")
@@ -311,7 +387,70 @@ def main() -> int:
     ap.add_argument("--out", default="", help="输出 md 路径（可选）")
     ap.add_argument("--out-path-file", default="", help="包含输出 md 路径的文本文件（UTF-8，避免中文路径编码问题）")
     ap.add_argument("--images", default="", help="图片目录（可选）")
+    ap.add_argument("--auto-config", action="store_true", help="自动检测中文路径并使用配置文件方案（默认启用）")
+    ap.add_argument("--no-auto-config", action="store_true", help="禁用自动配置文件方案")
     args = ap.parse_args()
+
+    # 如果已经指定了 --config，直接从配置文件加载
+    if args.config:
+        config = load_config(args.config)
+        # 仅覆盖配置中显式提供的字段
+        for key, value in config.items():
+            if not hasattr(args, key):
+                continue
+            if value is None:
+                continue
+            if isinstance(value, str) and value == "":
+                continue
+            setattr(args, key, value)
+    # 否则检查是否需要自动创建配置文件（默认启用，除非指定 --no-auto-config）
+    elif not args.no_auto_config and check_and_handle_chinese_path(args):
+        # 检测到中文路径，需要先解析出 docx_path，然后创建配置文件
+        # 这里先尝试解析 docx_path
+        docx_path = None
+        try:
+            if args.docx:
+                docx_path = Path(args.docx).expanduser()
+            elif args.docx_dir:
+                docx_dir = Path(args.docx_dir).expanduser()
+                if docx_dir.exists():
+                    candidates = sorted(docx_dir.glob(args.pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+                    if candidates:
+                        if args.docx_index > 0 and args.docx_index <= len(candidates):
+                            docx_path = candidates[args.docx_index - 1]
+                        elif len(candidates) == 1:
+                            docx_path = candidates[0]
+        except Exception as e:
+            print(f"[自动配置] 解析路径时出错: {e}")
+        
+        if docx_path and docx_path.exists():
+            # 推导输出路径
+            project_root = None
+            for parent in docx_path.parents:
+                if parent.name.lower() == "input":
+                    project_root = parent.parent
+                    break
+            if project_root is None:
+                project_root = Path.cwd()
+            
+            out_dir = project_root / "output" / ("prdmd" if args.doc_type == "prd" else "codedesignmd")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_md = out_dir / f"{docx_path.stem}.md"
+            img_dir = out_md.parent / f"{out_md.stem}_images"
+            
+            # 创建配置文件
+            config_path = create_auto_config(docx_path, args.doc_type, out_md, img_dir)
+            
+            # 从配置文件加载参数
+            config = load_config(str(config_path))
+            for key, value in config.items():
+                if not hasattr(args, key):
+                    continue
+                if value is None:
+                    continue
+                if isinstance(value, str) and value == "":
+                    continue
+                setattr(args, key, value)
 
     docx_path = None
     if args.docx_path_file:
