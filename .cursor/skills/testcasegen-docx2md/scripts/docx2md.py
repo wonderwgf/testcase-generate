@@ -16,6 +16,12 @@ from pathlib import Path
 
 from docx import Document
 from docx.oxml.ns import qn
+from lxml import etree
+
+
+# Word XML 命名空间
+WORD_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+NSMAP = {'w': WORD_NAMESPACE}
 
 
 def _stdout_utf8():
@@ -100,6 +106,142 @@ def load_config(config_path: str) -> dict:
         return json.load(f)
 
 
+def get_text_from_element(element):
+    """
+    从 XML 元素中提取文本，包括修订模式（Track Changes）插入的内容。
+    处理 <w:ins>（插入）标签中的文本。
+    """
+    texts = []
+    
+    # 查找所有文本节点，包括普通文本和修订插入的文本
+    # w:t 是普通文本，w:ins/w:r/w:t 是修订插入的文本
+    for text_elem in element.iter():
+        # 只处理 w:t 标签（文本内容）
+        if text_elem.tag == qn('w:t'):
+            if text_elem.text:
+                texts.append(text_elem.text)
+    
+    return ''.join(texts)
+
+
+def get_paragraph_text_with_revisions(paragraph):
+    """
+    获取段落文本，包含修订模式插入的内容。
+    """
+    return get_text_from_element(paragraph._element)
+
+
+def get_runs_with_revisions(paragraph):
+    """
+    获取段落中的所有 run，包括修订模式（Track Changes）插入的 run。
+    返回 (run_element, is_revision) 的列表。
+    """
+    runs = []
+    p_elem = paragraph._element
+    
+    # 直接遍历段落下的子元素
+    for child in p_elem:
+        tag = child.tag
+        
+        # 普通 run
+        if tag == qn('w:r'):
+            runs.append((child, False))
+        
+        # 修订模式插入的内容 <w:ins>
+        elif tag == qn('w:ins'):
+            # ins 标签内部可能包含多个 run
+            for ins_child in child:
+                if ins_child.tag == qn('w:r'):
+                    runs.append((ins_child, True))
+    
+    return runs
+
+
+def get_run_text(run_elem):
+    """从 run 元素中提取文本"""
+    texts = []
+    for t_elem in run_elem.findall('.//w:t', NSMAP):
+        if t_elem.text:
+            texts.append(t_elem.text)
+    return ''.join(texts)
+
+
+def get_run_formatting(run_elem):
+    """从 run 元素中提取格式信息"""
+    is_bold = False
+    is_italic = False
+    is_underline = False
+    is_strike = False
+    color = None
+    
+    rPr = run_elem.find('w:rPr', NSMAP)
+    if rPr is not None:
+        # 检查粗体
+        bold_elem = rPr.find('w:b', NSMAP)
+        if bold_elem is not None:
+            val = bold_elem.get(qn('w:val'))
+            is_bold = val is None or val.lower() not in ('0', 'false')
+        
+        # 检查斜体
+        italic_elem = rPr.find('w:i', NSMAP)
+        if italic_elem is not None:
+            val = italic_elem.get(qn('w:val'))
+            is_italic = val is None or val.lower() not in ('0', 'false')
+        
+        # 检查下划线
+        underline_elem = rPr.find('w:u', NSMAP)
+        if underline_elem is not None:
+            val = underline_elem.get(qn('w:val'))
+            is_underline = val is not None and val.lower() != 'none'
+        
+        # 检查删除线
+        strike_elem = rPr.find('w:strike', NSMAP)
+        if strike_elem is not None:
+            val = strike_elem.get(qn('w:val'))
+            is_strike = val is None or val.lower() not in ('0', 'false')
+        
+        # 检查颜色
+        color_elem = rPr.find('w:color', NSMAP)
+        if color_elem is not None:
+            color_val = color_elem.get(qn('w:val'))
+            if color_val and color_val.lower() not in ('auto', '000000'):
+                color = f"#{color_val}"
+                if is_dark_color(color):
+                    color = None
+    
+    return {
+        'bold': is_bold,
+        'italic': is_italic,
+        'underline': is_underline,
+        'strike': is_strike,
+        'color': color
+    }
+
+
+def format_run_element_text(run_elem):
+    """格式化 run 元素的文本（支持修订模式）"""
+    text = get_run_text(run_elem)
+    if not text:
+        return ""
+    
+    fmt = get_run_formatting(run_elem)
+    
+    # 修订/批注中的颜色标签不再输出，只保留粗体/斜体/下划线/删除线
+    if not any([fmt['bold'], fmt['italic'], fmt['underline'], fmt['strike']]):
+        return text
+    
+    formatted_text = text
+    if fmt['strike']:
+        formatted_text = f"~~{formatted_text}~~"
+    if fmt['underline']:
+        formatted_text = f"<u>{formatted_text}</u>"
+    if fmt['italic']:
+        formatted_text = f"*{formatted_text}*"
+    if fmt['bold']:
+        formatted_text = f"**{formatted_text}**"
+    return formatted_text
+
+
 def get_paragraph_style_level(paragraph):
     """获取段落的标题层级"""
     style_name = paragraph.style.name
@@ -167,14 +309,12 @@ def format_run_text(run):
     is_italic = run.italic is True
     is_underline = run.underline is True
     is_strike = run.font.strike is True
-    color = get_text_color(run)
 
-    if not any([is_bold, is_italic, is_underline, is_strike, color]):
+    # 修订/批注中的颜色标签不再输出，只保留粗体/斜体/下划线/删除线
+    if not any([is_bold, is_italic, is_underline, is_strike]):
         return text
 
     formatted_text = text
-    if color:
-        formatted_text = f'<span style="color: {color}">{formatted_text}</span>'
     if is_strike:
         formatted_text = f"~~{formatted_text}~~"
     if is_underline:
@@ -237,7 +377,13 @@ def extract_images_from_paragraph(paragraph, image_dir, image_counter, output_pa
 
 def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None):
     level = get_paragraph_style_level(paragraph)
-    text = paragraph.text.strip()
+    
+    # 使用支持修订模式的文本提取方法
+    text = get_paragraph_text_with_revisions(paragraph).strip()
+    
+    # 如果修订模式提取为空，回退到标准方法
+    if not text:
+        text = paragraph.text.strip()
 
     images_md, image_counter = extract_images_from_paragraph(paragraph, image_dir, image_counter, output_path)
 
@@ -252,7 +398,26 @@ def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None)
             result += "\n".join(images_md) + "\n"
         return result, image_counter
 
-    if paragraph.runs:
+    # 获取包含修订的 runs
+    runs_with_revisions = get_runs_with_revisions(paragraph)
+    
+    # 检查是否全部为粗体（用于判断是否为标题）
+    if runs_with_revisions:
+        all_bold = True
+        for run_elem, is_revision in runs_with_revisions:
+            run_text = get_run_text(run_elem)
+            if run_text.strip():
+                fmt = get_run_formatting(run_elem)
+                if not fmt['bold']:
+                    all_bold = False
+                    break
+        if all_bold and len(text) < 100:
+            result = f"### {text}\n"
+            if images_md:
+                result += "\n".join(images_md) + "\n"
+            return result, image_counter
+    elif paragraph.runs:
+        # 回退到标准方法
         all_bold = all(run.bold is True for run in paragraph.runs if run.text.strip())
         if all_bold and len(text) < 100:
             result = f"### {text}\n"
@@ -272,7 +437,13 @@ def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None)
             result += "\n".join(images_md) + "\n"
         return result, image_counter
 
-    formatted_text = "".join(format_run_text(run) for run in paragraph.runs).strip()
+    # 使用支持修订模式的格式化方法
+    if runs_with_revisions:
+        formatted_text = "".join(format_run_element_text(run_elem) for run_elem, _ in runs_with_revisions).strip()
+    else:
+        # 回退到标准方法
+        formatted_text = "".join(format_run_text(run) for run in paragraph.runs).strip()
+    
     result = formatted_text + "\n"
     if images_md:
         result += "\n" + "\n".join(images_md) + "\n"
@@ -280,10 +451,18 @@ def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None)
 
 
 def format_cell_text(cell):
+    """格式化表格单元格文本，支持修订模式"""
     formatted_parts = []
     for paragraph in cell.paragraphs:
-        for run in paragraph.runs:
-            formatted_parts.append(format_run_text(run))
+        # 优先使用支持修订模式的方法
+        runs_with_revisions = get_runs_with_revisions(paragraph)
+        if runs_with_revisions:
+            for run_elem, _ in runs_with_revisions:
+                formatted_parts.append(format_run_element_text(run_elem))
+        else:
+            # 回退到标准方法
+            for run in paragraph.runs:
+                formatted_parts.append(format_run_text(run))
     return "".join(formatted_parts).strip().replace("\n", " ")
 
 
