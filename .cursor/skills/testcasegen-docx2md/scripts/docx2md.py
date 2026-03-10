@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -242,8 +243,72 @@ def format_run_element_text(run_elem):
     return formatted_text
 
 
+# 章节式编号：支持 1. / 1.1. / 2.1.1.3.1.1.1. 等 → 转为 md 标题，层级由编号段数决定
+SECTION_NUMBERING_RE = re.compile(r"^\s*(\d+(?:\.\d+)*\.)\s+", re.UNICODE)
+
+
+def is_section_style_numbering(text):
+    """判断是否像「章节编号」（如 1. 需求概述、2.1.1.1. 功能描述），应转为标题；否则按列表项处理。"""
+    return bool(text and SECTION_NUMBERING_RE.match(text))
+
+
+def section_numbering_depth(text):
+    """
+    从章节编号文本中解析层级深度。如 "2.1.1.3.1.1.1. 开单" → 7。
+    用于正确输出 ## / ### / ... / ######，与文档目录层级一致。
+    """
+    match = SECTION_NUMBERING_RE.match(text)
+    if not match:
+        return None
+    num_part = match.group(1)  # e.g. "2.1.1.3.1.1.1."
+    segments = re.findall(r"\d+", num_part)
+    return len(segments) if segments else None
+
+
+def get_paragraph_outline_only(paragraph):
+    """
+    仅获取段落的 outlineLvl（大纲级别），用于标题。返回 0-based 级别，无则 None。
+    outlineLvl 是 Word 目录用的大纲级别，有这个属性的段落一定是标题。
+    """
+    p_elem = paragraph._element
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    outline_lvl = p_pr.find(qn("w:outlineLvl"))
+    if outline_lvl is not None:
+        val = outline_lvl.get(qn("w:val"))
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def get_paragraph_numbering_level(paragraph):
+    """
+    仅获取段落的 numPr/ilvl（编号级别），用于列表项。返回 0-based 级别，无则 None。
+    有 numPr 的段落可能是自动编号标题，也可能是列表项，需配合其他判断使用。
+    """
+    p_elem = paragraph._element
+    p_pr = p_elem.find(qn("w:pPr"))
+    if p_pr is None:
+        return None
+    num_pr = p_pr.find(qn("w:numPr"))
+    if num_pr is not None:
+        ilvl = num_pr.find(qn("w:ilvl"))
+        if ilvl is not None:
+            val = ilvl.get(qn("w:val"))
+            if val is not None:
+                try:
+                    return int(val)
+                except (TypeError, ValueError):
+                    pass
+    return None
+
+
 def get_paragraph_style_level(paragraph):
-    """获取段落的标题层级"""
+    """获取段落的标题层级（仅按样式名）"""
     style_name = paragraph.style.name
     if "Heading" in style_name or "标题" in style_name:
         if "1" in style_name or "一" in style_name:
@@ -376,12 +441,8 @@ def extract_images_from_paragraph(paragraph, image_dir, image_counter, output_pa
 
 
 def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None):
-    level = get_paragraph_style_level(paragraph)
-    
     # 使用支持修订模式的文本提取方法
     text = get_paragraph_text_with_revisions(paragraph).strip()
-    
-    # 如果修订模式提取为空，回退到标准方法
     if not text:
         text = paragraph.text.strip()
 
@@ -392,10 +453,45 @@ def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None)
     if not text:
         return "", image_counter
 
-    if level > 0:
+    # ── 标题判定（按优先级） ──
+
+    # 1) Heading 样式（Heading 1-6 / 标题 1-6）→ 直接按样式级别转标题
+    style_level = get_paragraph_style_level(paragraph)
+    if style_level > 0:
+        result = f"{'#' * style_level} {text}\n"
+        if images_md:
+            result += "\n".join(images_md) + "\n"
+        return result, image_counter
+
+    # 2) outlineLvl（大纲级别）→ Word 目录用的，有此属性的段落一定是标题
+    outline_only = get_paragraph_outline_only(paragraph)
+    if outline_only is not None:
+        level = min(outline_only + 1, 6)  # outlineLvl 0 → #, 1 → ##, ...
         result = f"{'#' * level} {text}\n"
         if images_md:
             result += "\n".join(images_md) + "\n"
+        return result, image_counter
+
+    # 3) numPr/ilvl（编号）+ 文本以章节编号开头（如 1.1. / 2.1.1.3.1.1.1.）→ 按段数定标题
+    num_level = get_paragraph_numbering_level(paragraph)
+    if num_level is not None:
+        if is_section_style_numbering(text):
+            depth = section_numbering_depth(text)
+            level = min(depth, 6) if depth else min(num_level + 1, 6)
+            result = f"{'#' * level} {text}\n"
+            if images_md:
+                result += "\n".join(images_md) + "\n"
+            return result, image_counter
+        # 4) numPr/ilvl + 非章节文本 → 列表项（● / (1)(2)(3) / ①② 等）
+        runs_with_revisions = get_runs_with_revisions(paragraph)
+        if runs_with_revisions:
+            list_text = "".join(format_run_element_text(run_elem) for run_elem, _ in runs_with_revisions).strip()
+        else:
+            list_text = "".join(format_run_text(run) for run in paragraph.runs).strip()
+        indent = "  " * min(num_level, 1)
+        result = f"{indent}- {list_text}\n"
+        if images_md:
+            result += "\n" + "\n".join(images_md) + "\n"
         return result, image_counter
 
     # 获取包含修订的 runs
@@ -451,19 +547,24 @@ def paragraph_to_markdown(paragraph, image_dir, image_counter, output_path=None)
 
 
 def format_cell_text(cell):
-    """格式化表格单元格文本，支持修订模式"""
-    formatted_parts = []
+    """格式化表格单元格文本，支持修订模式；保留单元格内换行与编号列表，用 <br> 输出。"""
+    paragraph_texts = []
     for paragraph in cell.paragraphs:
         # 优先使用支持修订模式的方法
         runs_with_revisions = get_runs_with_revisions(paragraph)
         if runs_with_revisions:
-            for run_elem, _ in runs_with_revisions:
-                formatted_parts.append(format_run_element_text(run_elem))
+            para_text = "".join(
+                format_run_element_text(run_elem) for run_elem, _ in runs_with_revisions
+            ).strip()
         else:
-            # 回退到标准方法
-            for run in paragraph.runs:
-                formatted_parts.append(format_run_text(run))
-    return "".join(formatted_parts).strip().replace("\n", " ")
+            para_text = "".join(
+                format_run_text(run) for run in paragraph.runs
+            ).strip()
+        if para_text:
+            paragraph_texts.append(para_text)
+    # 用 <br> 连接各段，使 Markdown 表格单元格内保留换行；单元格内若有 \n 也转为 <br>
+    cell_text = " <br> ".join(paragraph_texts)
+    return cell_text.replace("\n", " ").strip()
 
 
 def convert_table_to_markdown(table):

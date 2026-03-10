@@ -21,15 +21,15 @@ disable-model-invocation: true
 ```
 <项目名>/
 ├── input/                    # 输入文件目录
-│   ├── prdword/              # 需求文档（.docx）
-│   ├── codedesignword/       # 设计文档（.docx）
+│   ├── prd/                  # 需求文档（.docx）
+│   ├── codedesign/           # 设计文档（.docx）
 │   ├── knowledge/            # 领域知识文档
 │   └── baseline_cases/       # 基线测试用例
 │
 └── output/                   # 输出文件目录（与 input 同级）
-    ├── prdmd/                # 需求文档转换后的 Markdown
-    ├── codedesignmd/         # 设计文档转换后的 Markdown
-    ├── requirement_analysis/ # 需求解析报告
+    ├── prd/                  # 需求文档转换后的 Markdown
+    ├── codedesign/           # 设计文档转换后的 Markdown
+    ├── prd_analysis/         # 需求解析报告
     ├── test_outline/         # 测试概要
     ├── test_cases/           # 测试用例
     └── xmind/                # XMind 脑图文件
@@ -43,17 +43,17 @@ disable-model-invocation: true
 
 在聊天中输入（替换文件路径）：
 
-- `@<需求md文件>`（位于 `<项目>/output/prdmd/` 下）
+- `@<需求md文件>`（位于 `<项目>/output/prd/` 下）
 - `@.cursor/skills/testcasegen-prompts/rules/01prdreadrule.mdc`（或 `@rules/01prdreadrule.mdc`）
 
 并让模型输出最终 Markdown，保存为：
 
-`<项目>/output/requirement_analysis/<前缀>_需求解析报告.md`
+`<项目>/output/prd_analysis/<前缀>_需求解析报告.md`
 
 ### Step2 测试概要
 
-- `@<项目>/output/requirement_analysis/<前缀>_需求解析报告.md`
-- `@<项目>/output/codedesignmd/<设计md>.md`（可选）
+- `@<项目>/output/prd_analysis/<前缀>_需求解析报告.md`
+- `@<项目>/output/codedesign/<设计md>.md`（可选）
 - `@<项目>/input/knowledge/<知识库文件>`（可选）
 - `@.cursor/skills/testcasegen-prompts/rules/02testdesign.mdc`（或 `@rules/02testdesign.mdc`）
 
