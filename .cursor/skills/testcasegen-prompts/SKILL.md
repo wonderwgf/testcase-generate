@@ -52,7 +52,8 @@ disable-model-invocation: true
 
 ### Step2 测试概要
 
-- `@<项目>/output/prd_analysis/<前缀>_需求解析报告.md`
+- `@<项目>/output/prd_analysis/<前缀>_需求解析报告.md`（必选）
+- `@<项目>/output/prd/<需求md>.md`（**可选**，当需求解析报告对某功能列表页/详情页不够细时，直接引用 PRD 原文可补充查询筛选项、列表字段、按钮规则等）
 - `@<项目>/output/codedesign/<设计md>.md`（可选）
 - `@<项目>/input/knowledge/<知识库文件>`（可选）
 - `@.cursor/skills/testcasegen-prompts/rules/02testdesign.mdc`（或 `@rules/02testdesign.mdc`）
@@ -63,9 +64,12 @@ disable-model-invocation: true
 
 ### Step3 测试用例
 
-- `@<项目>/output/test_outline/<前缀>_测试概要.md`
+- `@<项目>/output/test_outline/<前缀>_测试概要.md`（必选）
+- `@<项目>/output/prd/<需求md>.md`（**推荐**，用于回溯补充提示文案、校验规则、枚举值等细节）
+- `@<项目>/output/prd/<通用业务规则清单>.md`（**可选**，用于生成通用业务规则验证用例，详见规则11.5）
 - `@.cursor/skills/testcasegen-prompts/rules/03testrequirement.mdc`（或 `@rules/03testrequirement.mdc`）
 
 保存为：
 
 `<项目>/output/test_cases/<前缀>_测试用例.md`
+
