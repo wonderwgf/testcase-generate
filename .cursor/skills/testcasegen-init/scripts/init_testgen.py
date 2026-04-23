@@ -5,8 +5,8 @@
 
 功能：
 - 在指定工作区下创建项目目录及 input/output 子目录结构
-- 创建 input/：prd、knowledge、codedesign、baseline_cases
-- 创建 output/：prd、codedesign、prd_analysis、test_outline、test_cases、xmind
+- 创建 input/：prd、knowledge（含 baseline_cases/business/codedesign/prd 子目录）
+- 创建 output/：prd、prd_analysis、test_outline、test_cases、xmind
 
 用法：
   方案 A（路径全英文，推荐）：
@@ -60,13 +60,13 @@ def load_config(config_path: str) -> dict:
 def ensure_layout(project_dir: Path) -> dict:
     # input
     (project_dir / "input" / "prd").mkdir(parents=True, exist_ok=True)
-    (project_dir / "input" / "knowledge").mkdir(parents=True, exist_ok=True)
-    (project_dir / "input" / "codedesign").mkdir(parents=True, exist_ok=True)
-    (project_dir / "input" / "baseline_cases").mkdir(parents=True, exist_ok=True)
+    (project_dir / "input" / "knowledge" / "baseline_cases").mkdir(parents=True, exist_ok=True)
+    (project_dir / "input" / "knowledge" / "business").mkdir(parents=True, exist_ok=True)
+    (project_dir / "input" / "knowledge" / "codedesign").mkdir(parents=True, exist_ok=True)
+    (project_dir / "input" / "knowledge" / "prd").mkdir(parents=True, exist_ok=True)
 
     # output
     (project_dir / "output" / "prd").mkdir(parents=True, exist_ok=True)
-    (project_dir / "output" / "codedesign").mkdir(parents=True, exist_ok=True)
     (project_dir / "output" / "prd_analysis").mkdir(parents=True, exist_ok=True)
     (project_dir / "output" / "test_outline").mkdir(parents=True, exist_ok=True)
     (project_dir / "output" / "test_cases").mkdir(parents=True, exist_ok=True)

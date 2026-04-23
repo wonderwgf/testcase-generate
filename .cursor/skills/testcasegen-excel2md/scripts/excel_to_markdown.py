@@ -57,6 +57,21 @@ def dataframe_to_markdown(df, sheet_name):
     return "\n".join(md_lines)
 
 
+def _open_excel_file(excel_path):
+    """优先用 pandas 默认引擎；遇 openpyxl 样式损坏等问题时回退 calamine。"""
+    path = Path(excel_path)
+    last_err = None
+    for engine in (None, "calamine"):
+        try:
+            kw = {} if engine is None else {"engine": engine}
+            return pd.ExcelFile(path, **kw)
+        except Exception as e:
+            last_err = e
+            label = "默认" if engine is None else engine
+            print(f"  提示：{label} 引擎打开失败 ({e})，尝试下一引擎…")
+    raise RuntimeError(f"无法读取 Excel 文件: {last_err}") from last_err
+
+
 def convert_excel_to_markdown(excel_path, output_path=None, single_file=True):
     """
     将Excel文件转换为Markdown格式
@@ -75,8 +90,8 @@ def convert_excel_to_markdown(excel_path, output_path=None, single_file=True):
     print(f"正在读取Excel文件: {excel_path}")
     
     try:
-        # 读取所有sheet页
-        xlsx = pd.ExcelFile(excel_path)
+        # 读取所有sheet页（必要时自动回退 calamine，规避 openpyxl 样式解析错误）
+        xlsx = _open_excel_file(excel_path)
         sheet_names = xlsx.sheet_names
         print(f"发现 {len(sheet_names)} 个sheet页: {sheet_names}")
         

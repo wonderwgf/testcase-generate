@@ -1,0 +1,57 @@
+# 测试用例生成项目 .gitignore
+# 根据用户要求，忽略整个 input 和 output 目录（包含所有项目数据和生成结果）
+# 注意：这会导致所有 PRD、知识库、生成的测试用例、XMind 等都不被版本控制
+# 如果未来想提交核心产出（测试用例、报告），请修改此文件
+
+**/input/
+**/output/
+scpr/
+acflow/
+loc/
+thfj/
+wklt/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+
+# Cursor / VS Code 临时文件
+.cursor/temp/
+.cursor/commands/*.tmp
+.vscode/
+*.code-workspace
+
+# 编辑器临时文件
+**/~$*.*
+*.tmp
+.DS_Store
+Thumbs.db
+
+# 日志和临时数据
+*.log
+logs/
+**/*.bak
+
+# 重复的技能文件（Windows 路径导致的 duplicate）
+.cursor/skills/**/*.md
+!**/.cursor/skills/**/SKILL.md
+!**/.cursor/commands/testcasegen.md
+
+# 可选：如果想保留部分 output 核心文件，可取消下面注释
+# !**/output/test_cases/
+# !**/output/test_outline/
+# !**/output/prd_analysis/
+# !**/output/xmind/
+# !**/output/prd/**/_manifest.json
+
+# 图片文件（大量存在，建议忽略）
+**/*_images/
+**/*.png
+**/*.jpg
+**/*.jpeg
